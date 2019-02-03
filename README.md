@@ -1,2 +1,2 @@
-# tracking-and-recognition
-algorithm for tracking and recognizing an individual
+# Tracking & Recognition
+Algorithm for tracking and recognizing an individual
