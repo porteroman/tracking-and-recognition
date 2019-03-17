@@ -9,7 +9,10 @@ import argparse
 import imutils
 import pickle
 import cv2
+from PIL import Image
 import os
+import mtcnn_torch.src as mtcnn 
+
 
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
@@ -59,6 +62,39 @@ for (i, imagePath) in enumerate(imagePaths):
 	# maintaining the aspect ratio), and then grab the image
 	# dimensions
 	image = cv2.imread(imagePath)
+
+
+	"""
+	# conver image to pillow format for using mtcnn for facedetection
+	image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+	im_pil = Image.fromarray(image)
+
+	bounding_boxes, landmarks = mtcnn.detect_faces(im_pil)
+
+	# continue if no bounding_boxes detected
+	if len(bounding_boxes) == 0:
+		continue
+	crop_im_pil = im_pil.crop(tuple(list(bounding_boxes[0])[:4]))
+	# For reversing from pillow format to opencv:
+	image = np.asarray(crop_im_pil)
+	image = imutils.resize(image, width=600)
+
+	# construct a blob for the face ROI, then pass the blob
+	# through our face embedding model to obtain the 128-d
+	# quantification of the face
+	faceBlob = cv2.dnn.blobFromImage(image, 1.0 / 255,
+		(96, 96), (0, 0, 0), swapRB=True, crop=True)
+	embedder.setInput(faceBlob)
+	vec = embedder.forward()
+
+	# add the name of the person + corresponding face
+	# embedding to their respective lists
+	knownNames.append(name)
+	knownEmbeddings.append(vec.flatten())
+	total += 1
+	"""
+
+	
 	image = imutils.resize(image, width=600)
 	(h, w) = image.shape[:2]
 

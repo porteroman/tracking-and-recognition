@@ -27,6 +27,7 @@ print("[INFO] encoding labels...")
 le = LabelEncoder()
 labels = le.fit_transform(data["names"])
 
+
 # train the model used to accept the 128-d embeddings of the face and
 # then produce the actual face recognition
 print("[INFO] training model...")

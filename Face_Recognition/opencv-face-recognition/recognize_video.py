@@ -15,6 +15,9 @@ import time
 import cv2
 import os
 
+from keras.models import load_model
+from keras.preprocessing.image import img_to_array
+
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
 ap.add_argument("-d", "--detector", required=True,
@@ -25,6 +28,10 @@ ap.add_argument("-r", "--recognizer", required=True,
 	help="path to model trained to recognize faces")
 ap.add_argument("-l", "--le", required=True,
 	help="path to label encoder")
+ap.add_argument("-lmo", "--liveness_model", required=True,
+	help="path to liveness model")
+ap.add_argument("-lle", "--liveness_le", required=True,
+	help="path to liveness label encoder")
 ap.add_argument("-c", "--confidence", type=float, default=0.5,
 	help="minimum probability to filter weak detections")
 args = vars(ap.parse_args())
@@ -40,9 +47,16 @@ detector = cv2.dnn.readNetFromCaffe(protoPath, modelPath)
 print("[INFO] loading face recognizer...")
 embedder = cv2.dnn.readNetFromTorch(args["embedding_model"])
 
+
 # load the actual face recognition model along with the label encoder
 recognizer = pickle.loads(open(args["recognizer"], "rb").read())
 le = pickle.loads(open(args["le"], "rb").read())
+
+
+# load the liveness detector model and label encoder from disk
+print("[INFO] loading liveness detector...")
+liveness_model = load_model(args["liveness_model"])
+liveness_le = pickle.loads(open(args["liveness_le"], "rb").read())
 
 # initialize the video stream, then allow the camera sensor to warm up
 print("[INFO] starting video stream...")
@@ -94,28 +108,55 @@ while True:
 			if fW < 20 or fH < 20:
 				continue
 
-			# construct a blob for the face ROI, then pass the blob
-			# through our face embedding model to obtain the 128-d
-			# quantification of the face
-			faceBlob = cv2.dnn.blobFromImage(face, 1.0 / 255,
-				(96, 96), (0, 0, 0), swapRB=True, crop=False)
-			embedder.setInput(faceBlob)
-			vec = embedder.forward()
+			# Check liveness 
 
-			# perform classification to recognize the face
-			preds = recognizer.predict_proba(vec)[0]
+			# pass the face ROI through the trained liveness detector
+			# model to determine if the face is "real" or "fake"
+
+			liveness_face = cv2.resize(face, (32, 32))
+			liveness_face = liveness_face.astype("float") / 255.0
+			liveness_face = img_to_array(liveness_face)
+			liveness_face = np.expand_dims(liveness_face, axis=0)
+
+			preds = liveness_model.predict(liveness_face)[0]
 			j = np.argmax(preds)
-			proba = preds[j]
-			name = le.classes_[j]
+			label = liveness_le.classes_[j]
 
-			# draw the bounding box of the face along with the
-			# associated probability
-			text = "{}: {:.2f}%".format(name, proba * 100)
-			y = startY - 10 if startY - 10 > 10 else startY + 10
-			cv2.rectangle(frame, (startX, startY), (endX, endY),
-				(0, 0, 255), 2)
-			cv2.putText(frame, text, (startX, y),
-				cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 2)
+			if label == 'fake':
+
+				# draw the label and bounding box on the frame
+				label = "{}: {:.4f}".format(label, preds[j])
+				cv2.putText(frame, label, (startX, startY - 10),
+					cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+				cv2.rectangle(frame, (startX, startY), (endX, endY),
+					(0, 0, 255), 2)
+
+			else:
+
+				# construct a blob for the face ROI, then pass the blob
+				# through our face embedding model to obtain the 128-d
+				# quantification of the face
+				faceBlob = cv2.dnn.blobFromImage(face, 1.0 / 255,
+					(96, 96), (0, 0, 0), swapRB=True, crop=False)
+
+
+				embedder.setInput(faceBlob)
+				vec = embedder.forward()
+
+				# perform classification to recognize the face
+				preds = recognizer.predict_proba(vec)[0]
+				j = np.argmax(preds)
+				proba = preds[j]
+				name = le.classes_[j]
+
+				# draw the bounding box of the face along with the
+				# associated probability
+				text = "{}: {:.2f}%".format(name, proba * 100)
+				y = startY - 10 if startY - 10 > 10 else startY + 10
+				cv2.rectangle(frame, (startX, startY), (endX, endY),
+					(0, 0, 255), 2)
+				cv2.putText(frame, text, (startX, y),
+					cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 2)
 
 	# update the FPS counter
 	fps.update()
